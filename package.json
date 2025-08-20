@@ -1,0 +1,27 @@
+{
+  "name": "ask-entre",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+  "dev": "netlify dev",
+  "build": "npm --prefix client run build",
+  "test": "echo \"no tests\""
+},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^17.2.1",
+    "openai": "^5.13.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^4.2.2",
+    "@types/node": "^24.3.0",
+    "esbuild": "^0.25.9",
+    "netlify-cli": "^23.1.4",
+    "typescript": "^5.9.2"
+  }
+}

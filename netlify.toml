@@ -1,0 +1,17 @@
+[build]
+  command = "npm run build"
+  publish = "client/dist"
+
+[functions]
+  directory = "netlify/functions"
+
+[dev]
+  framework = "#custom"
+  command = "npm --prefix client run dev" # starts Vite on 5173
+  targetPort = 5173                       # Vite’s port
+  port = 8888                             # Netlify dev proxy port
+
+[[redirects]]
+  from = "/api/coach"
+  to = "/.netlify/functions/coach"
+  status = 200
