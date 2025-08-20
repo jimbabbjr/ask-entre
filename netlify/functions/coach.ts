@@ -20,8 +20,8 @@ Core principles (anchor every answer):
 CLARITY GATE (run before answering):
 - If the latest user message is vague (e.g., < 12 words OR lacks specifics like metric/role/timeframe),
   ask EXACTLY ONE specific clarifying question and STOP.
-  Examples of vague → “Team not hitting targets—help?”, “Employee is difficult”, “Revenue is down.”
-  Good clarifier example: “Which targets are off (metric + timeframe), and what follow-up cadence exists now?”
+  Examples of vague → "Team not hitting targets—help?", "Employee is difficult", "Revenue is down."
+  Good clarifier example: "Which targets are off (metric + timeframe), and what follow-up cadence exists now?"
 - If a clarifier was already asked earlier in this conversation, DO NOT ask again—proceed with a best-effort answer and state 1–2 brief assumptions if needed.
 
 Output format (when answering):
@@ -31,11 +31,54 @@ Output format (when answering):
 
 Style:
 - ≤300 words. No fluff. No corporate speak. Plain language.
-- Never say “as an AI.” Be clear and decisive.
+- Never say "as an AI." Be clear and decisive.
 - If off-scope (tax law, payroll minutiae), redirect to a qualified pro AND give one leadership action the owner can take.
 `;
 
 type Msg = { role: 'user' | 'assistant'; content: string };
+
+/** Second-pass reviewer to tighten the draft to EL voice & anchors (no code rules per topic). */
+async function brandReview({
+  client,
+  model,
+  question,
+  draft,
+}: {
+  client: OpenAI;
+  model: string;
+  question: string;
+  draft: string;
+}) {
+  const res = await client.chat.completions.create({
+    model,
+    temperature: 0.2,
+    messages: [
+      {
+        role: 'system',
+        content: `
+You are the Brand Reviewer for EntreLeadership answers.
+Tighten the DRAFT so it clearly reflects EntreLeadership practices and voice—ONLY where relevant to the QUESTION.
+Keep the 3-part format exactly:
+1) Direct answer —
+2) Why it matters —
+3) How to apply —
+Rules:
+- ≤300 words, plainspoken, decisive. No hedging.
+- Do not ask clarifying questions here.
+- Only add references that fit the question: Weekly Reports (updates/accountability), Desired Future & defining objectives (alignment/resistance), named core values + brief comms plan (policy/exception), action items, leadership meeting cadence.
+- Do NOT invent new product names or frameworks.
+- Prefer concrete, practical language over abstractions.
+`
+      },
+      {
+        role: 'user',
+        content: `QUESTION:\n${question}\n\nDRAFT (keep substance; align to brand if relevant):\n${draft}`
+      }
+    ],
+  });
+
+  return res.choices?.[0]?.message?.content?.trim() || draft;
+}
 
 export const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod !== 'POST') {
@@ -43,7 +86,7 @@ export const handler: Handler = async (event: HandlerEvent) => {
   }
 
   try {
-    const body = JSON.parse(event.body || '{}') as { messages?: Msg[]; question?: string; mode?: string };
+    const body = JSON.parse(event.body || '{}') as { messages?: Msg[]; question?: string };
 
     // Accept either full chat history or a single question for back-compat
     let messages: Msg[] = Array.isArray(body.messages)
@@ -84,15 +127,40 @@ export const handler: Handler = async (event: HandlerEvent) => {
 - Close with owners + due dates for every action item.`
         },
 
-        // Real conversation history (so the model knows if it already asked a clarifier)
+        // Real conversation history (lets the model see if it already asked a clarifier)
         ...messages
       ]
     });
 
     let answer = res.choices?.[0]?.message?.content?.trim() || 'Sorry, no answer generated.';
 
-    // Observability: log Q/A line
+    // Observability: question text
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
+
+    // If it's a real answer (not just a clarifier), run brand review
+    const hasFormat =
+      /1\)\s*Direct answer/i.test(answer) &&
+      /2\)\s*Why it matters/i.test(answer) &&
+      /3\)\s*How to apply/i.test(answer);
+
+    if (hasFormat) {
+      const reviewed = await brandReview({
+        client,
+        model,
+        question: lastUserMsg,
+        draft: answer,
+      });
+
+      if (
+        /1\)\s*Direct answer/i.test(reviewed) &&
+        /2\)\s*Why it matters/i.test(reviewed) &&
+        /3\)\s*How to apply/i.test(reviewed)
+      ) {
+        answer = reviewed;
+      }
+    }
+
+    // Log a compact Q/A line
     try {
       console.log(
         'COACH_QA',
