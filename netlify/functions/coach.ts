@@ -1,6 +1,7 @@
 import 'dotenv/config';
-import type { Handler } from '@netlify/functions';
+import type { Handler, HandlerEvent } from '@netlify/functions';
 import OpenAI from 'openai';
+import { connectLambda, getStore } from '@netlify/blobs';
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -20,7 +21,7 @@ CLARITY GATE (run before answering):
 - If the latest user message is vague (e.g., < 12 words OR lacks specifics like metric/role/timeframe),
   ask EXACTLY ONE specific clarifying question and STOP.
   Examples of vague → “Team not hitting targets—help?”, “Employee is difficult”, “Revenue is down.”
-  Good clarifiers: “Which targets are off (metric + timeframe), and what follow-up cadence exists now?”
+  Good clarifier example: “Which targets are off (metric + timeframe), and what follow-up cadence exists now?”
 - If a clarifier was already asked earlier in this conversation, DO NOT ask again—proceed with a best-effort answer and state 1–2 brief assumptions if needed.
 
 Output format (when answering):
@@ -36,17 +37,17 @@ Style:
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
-export const handler: Handler = async (event) => {
+export const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Use POST' };
   }
 
   try {
-    const body = JSON.parse(event.body || '{}') as { messages?: Msg[]; question?: string };
+    const body = JSON.parse(event.body || '{}') as { messages?: Msg[]; question?: string; mode?: string };
 
-    // Back-compat: allow either {question} or full {messages}
+    // Accept either full chat history or a single question for back-compat
     let messages: Msg[] = Array.isArray(body.messages)
-      ? body.messages.filter(m => m && typeof m.content === 'string')
+      ? body.messages.filter((m) => m && typeof m.content === 'string')
       : [];
 
     if (!messages.length && typeof body.question === 'string' && body.question.trim()) {
@@ -60,19 +61,19 @@ export const handler: Handler = async (event) => {
     const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
     const res = await client.chat.completions.create({
-  model,
-  temperature: 0.3,
-  messages: [
-    { role: 'system', content: SYSTEM_PROMPT },
+      model,
+      temperature: 0.3,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
 
-    // EXAMPLE 1 — vague prompt => one clarifier, then stop
-    { role: 'user', content: 'Employee is being difficult.' },
-    { role: 'assistant', content: 'Which behavior is causing issues (be specific), and what expectation have you already set?' },
+        // Few-shot examples to lock behavior/voice
+        { role: 'user', content: 'Employee is being difficult.' },
+        { role: 'assistant', content: 'Which behavior is causing issues (be specific), and what expectation have you already set?' },
 
-    // EXAMPLE 2 — proper 3-part answer
-    { role: 'user', content: 'My weekly leadership meeting keeps running long and lacks focus. What should I do?' },
-    { role: 'assistant', content:
-`1) Direct answer — Reset the meeting with a tight agenda, clear roles, and hard time boxes. Start with wins, review top metrics, unblock decisions, assign owners, end with action items.
+        { role: 'user', content: 'My weekly leadership meeting keeps running long and lacks focus. What should I do?' },
+        {
+          role: 'assistant',
+          content: `1) Direct answer — Reset the meeting with a tight agenda, clear roles, and hard time boxes. Start with wins, review top metrics, unblock decisions, assign owners, end with action items.
 
 2) Why it matters — Leaders create alignment and accountability. A focused cadence keeps people pulling the same direction and protects the team’s time.
 
@@ -80,17 +81,18 @@ export const handler: Handler = async (event) => {
 - Publish a one-page agenda today: wins (3m), scorecard (5m), top 3 issues/decisions (20m), action items review (5m).
 - Assign roles: facilitator, scribe, and timekeeper. Start on time; end on time.
 - Track 5–7 metrics only; cut anything that doesn’t drive decisions.
-- Close with owners + due dates for every action item.` },
+- Close with owners + due dates for every action item.`
+        },
 
-    // Now include the real conversation
-    ...messages
-  ],
-});
+        // Real conversation history (so the model knows if it already asked a clarifier)
+        ...messages
+      ]
+    });
 
-    const answer = res.choices?.[0]?.message?.content?.trim() || 'Sorry, no answer generated.';
-    const lastUserMsg =
-      [...messages].reverse().find(m => m.role === 'user')?.content || '';
+    let answer = res.choices?.[0]?.message?.content?.trim() || 'Sorry, no answer generated.';
 
+    // Observability: log Q/A line
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
     try {
       console.log(
         'COACH_QA',
@@ -103,6 +105,26 @@ export const handler: Handler = async (event) => {
         })
       );
     } catch {}
+
+    // Persist to Netlify Blobs for >24h retention
+    try {
+      connectLambda(event as any);
+      const store = getStore('logs');
+      const ts = new Date().toISOString();
+      await store.setJSON(
+        `qa/${ts.slice(0, 10)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`,
+        {
+          ts,
+          q: lastUserMsg.slice(0, 500),
+          answer: answer.slice(0, 2000),
+          ua: event.headers?.['user-agent'] || ''
+        }
+      );
+    } catch (e) {
+      // non-fatal
+      console.error('BLOBS_QA_ERROR', e);
+    }
+
     return {
       statusCode: 200,
       headers: { 'content-type': 'application/json' },

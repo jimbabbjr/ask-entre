@@ -1,21 +1,28 @@
-import type { Handler } from '@netlify/functions';
+import type { Handler, HandlerEvent } from '@netlify/functions';
+import { connectLambda, getStore } from '@netlify/blobs';
 
-export const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Use POST' };
-  }
+export const handler: Handler = async (event: HandlerEvent) => {
+  // 👇 satisfy TS — runtime is fine
+  connectLambda(event as any);
 
   try {
     const body = JSON.parse(event.body || '{}');
-    // Expect: { good: boolean, why?: string, question?: string, answer?: string, ts?: string }
-    console.log('FEEDBACK', {
-      ts: body.ts || new Date().toISOString(),
+    const ts = body.ts || new Date().toISOString();
+
+    const entry = {
+      ts,
       good: !!body.good,
       why: (body.why || '').toString().slice(0, 500),
       question: (body.question || '').toString().slice(0, 500),
-      answer: (body.answer || '').toString().slice(0, 1000),
+      answer: (body.answer || '').toString().slice(0, 1200),
       ua: event.headers['user-agent'] || '',
-    });
+    };
+
+    const store = getStore('logs');
+    const key = `feedback/${ts.slice(0,10)}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.json`;
+    await store.setJSON(key, entry);
+    console.log('FEEDBACK', entry);
+
     return { statusCode: 204, body: '' };
   } catch (e) {
     console.error('FEEDBACK_ERROR', e);
