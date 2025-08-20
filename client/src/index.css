@@ -1,68 +1,132 @@
+/* ---- Brand Tokens ------------------------------------------------------- */
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  /* Core palette (light theme defaults) */
+  --e-black: #000000;
+  --e-black-6: #101820;       /* deep near-black */
+  --e-blue-2965: #002342;     /* deep navy */
+  --e-gold-7502: #BBA271;     /* warm gold */
+  --e-warmgray-1: #DCD8D1;    /* warm light gray */
+  --e-7528: #BCB3A4;          /* warm mid gray */
+  --e-white: #ffffff;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  /* Light theme surface/text */
+  --bg: var(--e-white);
+  --bg-muted: #f7f6f3;        /* subtle warm paper */
+  --text: var(--e-black-6);
+  --text-muted: #4b5563;
+  --accent: var(--e-gold-7502);
+  --link: var(--e-blue-2965);
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* Bubbles */
+  --bubble-user-bg: #f3f4f6;
+  --bubble-assistant-bg: #eef1f6;
+
+  /* Borders / shadows */
+  --border: #e5e7eb;
+  --ring: var(--e-gold-7502);
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+/* Dark mode — auto via media query */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: linear-gradient(180deg, #0e141a 0%, #0a0f14 40%, #071017 100%); /* black-6 to navy */
+    --bg-muted: #0f161c;
+    --text: var(--e-warmgray-1);
+    --text-muted: #a7b0b6;
+    --accent: var(--e-gold-7502);
+    --link: #9fb8d6;
+
+    --bubble-user-bg: #111a22;       /* subtle lift from bg */
+    --bubble-assistant-bg: #0d1a24;  /* slight navy tint */
+
+    --border: #1f2a33;
+    --ring: var(--e-gold-7502);
+  }
 }
 
+/* ---- Base --------------------------------------------------------------- */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+  background-attachment: fixed;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* Container */
+.container {
+  max-width: 760px;
+  margin: 2rem auto;
+  padding: 0 1rem 4rem;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+/* Headings – confident, not shouty */
+.h1 {
+  font-size: clamp(22px, 3vw, 28px);
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  margin: 0 0 6px;
+}
+.subtitle {
+  color: var(--text-muted);
+  margin: 0 0 14px;
+}
+
+/* Chat list */
+.chat { display: grid; gap: 12px; margin: 16px 0; }
+.bubble {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+.bubble.user { background: var(--bubble-user-bg); }
+.bubble.assistant { background: var(--bubble-assistant-bg); }
+
+/* Inputs */
+.textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  color: var(--text);
+  resize: vertical;
+}
+.textarea:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 35%, transparent);
+}
+
+/* Buttons */
+.row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+
+.btn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-muted);
+  color: var(--text);
   cursor: pointer;
-  transition: border-color 0.25s;
 }
-button:hover {
-  border-color: #646cff;
+.btn:hover { filter: brightness(1.02); }
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 35%, transparent);
 }
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+.btn.primary {
+  background: var(--accent);
+  color: var(--e-black-6);
+  border-color: color-mix(in srgb, var(--accent) 70%, #0000);
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-}
+/* Links */
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Small label */
+.kbd { background: #00000020; padding: 0 6px; border-radius: 6px; font-size: 12px; }
