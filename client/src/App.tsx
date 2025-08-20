@@ -81,7 +81,10 @@ export default function App() {
             >
               Copy answer
             </button>
-            <Thumbs />
+            <Thumbs
+  lastQuestion={messages.filter(m => m.role === 'user').slice(-1)[0]?.content || ''}
+  lastAnswer={lastAnswer}
+/>
           </>
         )}
       </div>
@@ -89,10 +92,11 @@ export default function App() {
   );
 }
 
-function Thumbs() {
+function Thumbs({ lastQuestion, lastAnswer }: { lastQuestion: string; lastAnswer: string }) {
   const [open, setOpen] = useState(false);
   const [why, setWhy] = useState('');
   const [good, setGood] = useState<boolean | null>(null);
+  const [sending, setSending] = useState(false);
 
   if (!open) {
     return (
@@ -103,6 +107,30 @@ function Thumbs() {
     );
   }
 
+  const send = async () => {
+    if (good === null || sending) return;
+    setSending(true);
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ts: new Date().toISOString(),
+          good,
+          why: why.trim(),
+          question: lastQuestion,
+          answer: lastAnswer,
+        }),
+      });
+      setOpen(false);
+      setWhy('');
+    } catch (e) {
+      alert('Could not send feedback. Try again.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
       <input
@@ -111,20 +139,10 @@ function Thumbs() {
         onChange={(e) => setWhy(e.target.value)}
         style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1px solid #d1d5db' }}
       />
-      <button
-        onClick={() => {
-          console.log('feedback', {
-            ts: new Date().toISOString(),
-            good,
-            why: why.trim(),
-          });
-          setOpen(false);
-          setWhy('');
-        }}
-        style={{ padding: '8px 12px', borderRadius: 10 }}
-      >
-        Send
+      <button onClick={send} disabled={sending} style={{ padding: '8px 12px', borderRadius: 10 }}>
+        {sending ? 'Sending…' : 'Send'}
       </button>
     </div>
   );
 }
+
