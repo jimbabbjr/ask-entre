@@ -8,27 +8,29 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   const ask = async () => {
-    const q = input.trim();
-    if (!q || loading) return;
-    setMessages((m) => [...m, { role: 'user', content: q }]);
-    setInput('');
-    setLoading(true);
+  const q = input.trim();
+  if (!q || loading) return;
 
-    try {
-      const res = await fetch('/api/coach', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ question: q }),
-      });
-      const data = await res.json();
-      const answer = (data?.answer || 'No answer.').trim();
-      setMessages((m) => [...m, { role: 'assistant', content: answer }]);
-    } catch (e) {
-      setMessages((m) => [...m, { role: 'assistant', content: 'Error. Try again.' }]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const nextMessages = [...messages, { role: 'user' as const, content: q }];
+  setMessages(nextMessages);
+  setInput('');
+  setLoading(true);
+
+  try {
+    const res = await fetch('/api/coach', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messages: nextMessages }),
+    });
+    const data = await res.json();
+    const answer = (data?.answer || 'No answer.').trim();
+    setMessages((m) => [...m, { role: 'assistant', content: answer }]);
+  } catch (e) {
+    setMessages((m) => [...m, { role: 'assistant', content: 'Error. Try again.' }]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
