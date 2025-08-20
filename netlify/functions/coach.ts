@@ -88,6 +88,21 @@ export const handler: Handler = async (event) => {
 });
 
     const answer = res.choices?.[0]?.message?.content?.trim() || 'Sorry, no answer generated.';
+    const lastUserMsg =
+      [...messages].reverse().find(m => m.role === 'user')?.content || '';
+
+    try {
+      console.log(
+        'COACH_QA',
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          q: lastUserMsg.slice(0, 500),
+          answer: answer.slice(0, 1200),
+          usage: (res as any).usage || null,
+          ua: event.headers?.['user-agent'] || ''
+        })
+      );
+    } catch {}
     return {
       statusCode: 200,
       headers: { 'content-type': 'application/json' },
