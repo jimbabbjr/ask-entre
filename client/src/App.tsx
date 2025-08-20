@@ -8,29 +8,29 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   const ask = async () => {
-  const q = input.trim();
-  if (!q || loading) return;
+    const q = input.trim();
+    if (!q || loading) return;
 
-  const nextMessages = [...messages, { role: 'user' as const, content: q }];
-  setMessages(nextMessages);
-  setInput('');
-  setLoading(true);
+    const nextMessages = [...messages, { role: 'user' as const, content: q }];
+    setMessages(nextMessages);
+    setInput('');
+    setLoading(true);
 
-  try {
-    const res = await fetch('/api/coach', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ messages: nextMessages }),
-    });
-    const data = await res.json();
-    const answer = (data?.answer || 'No answer.').trim();
-    setMessages((m) => [...m, { role: 'assistant', content: answer }]);
-  } catch (e) {
-    setMessages((m) => [...m, { role: 'assistant', content: 'Error. Try again.' }]);
-  } finally {
-    setLoading(false);
-  }
-};
+    try {
+      const res = await fetch('/api/coach', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messages: nextMessages }),
+      });
+      const data = await res.json();
+      const answer = (data?.answer || 'No answer.').trim();
+      setMessages((m) => [...m, { role: 'assistant', content: answer }]);
+    } catch {
+      setMessages((m) => [...m, { role: 'assistant', content: 'Error. Try again.' }]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -39,54 +39,54 @@ export default function App() {
     }
   };
 
-  const lastAnswer = messages.length && messages[messages.length - 1].role === 'assistant'
-    ? messages[messages.length - 1].content
-    : '';
+  const lastAnswer =
+    messages.length && messages[messages.length - 1].role === 'assistant'
+      ? messages[messages.length - 1].content
+      : '';
 
   return (
-    <div style={{ maxWidth: 760, margin: '2rem auto', padding: '0 1rem', fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ fontSize: 24, marginBottom: 8 }}>Ask EntreLeadership</h1>
-      <p style={{ color: '#6b7280', marginTop: 0, marginBottom: 16 }}>
-        Ask a leadership/management question. Press <kbd>⌘/Ctrl</kbd>+<kbd>Enter</kbd> to send.
+    <div className="container">
+      <h1 className="h1">Ask EntreLeadership</h1>
+      <p className="subtitle">
+        Ask a leadership or management question. Press <span className="kbd">⌘/Ctrl</span>+
+        <span className="kbd">Enter</span> to send.
       </p>
 
-      <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
+      <div className="chat">
         {messages.map((m, i) => (
-          <div key={i} style={{
-            background: m.role === 'user' ? '#f3f4f6' : '#eef6ff',
-            padding: '12px 14px',
-            borderRadius: 12,
-            whiteSpace: 'pre-wrap'
-          }}>
+          <div key={i} className={`bubble ${m.role === 'user' ? 'user' : 'assistant'}`}>
             <b>{m.role === 'user' ? 'You' : 'Coach'}:</b> {m.content}
           </div>
         ))}
       </div>
 
       <textarea
+        className="textarea"
         rows={4}
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={onKey}
         placeholder='e.g., "How do I hold my sales manager accountable without killing morale?"'
-        style={{ width: '100%', padding: 12, borderRadius: 12, border: '1px solid #d1d5db' }}
       />
-      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <button onClick={ask} disabled={loading} style={{ padding: '8px 12px', borderRadius: 10 }}>
+
+      <div className="row">
+        <button className="btn primary" onClick={ask} disabled={loading}>
           {loading ? 'Thinking…' : 'Ask (⌘/Ctrl+Enter)'}
         </button>
+
         {lastAnswer && (
           <>
             <button
+              className="btn copy"
               onClick={() => navigator.clipboard.writeText(lastAnswer)}
-              style={{ padding: '8px 12px', borderRadius: 10 }}
+              title="Copy the last answer"
             >
               Copy answer
             </button>
             <Thumbs
-  lastQuestion={messages.filter(m => m.role === 'user').slice(-1)[0]?.content || ''}
-  lastAnswer={lastAnswer}
-/>
+              lastQuestion={messages.filter((m) => m.role === 'user').slice(-1)[0]?.content || ''}
+              lastAnswer={lastAnswer}
+            />
           </>
         )}
       </div>
@@ -102,9 +102,9 @@ function Thumbs({ lastQuestion, lastAnswer }: { lastQuestion: string; lastAnswer
 
   if (!open) {
     return (
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={() => { setGood(true); setOpen(true); }}>👍 Felt like EntreLeadership</button>
-        <button onClick={() => { setGood(false); setOpen(true); }}>👎 Generic / off-brand</button>
+      <div className="row" style={{ marginTop: 0 }}>
+        <button className="btn" onClick={() => { setGood(true); setOpen(true); }}>👍 Felt like EntreLeadership</button>
+        <button className="btn" onClick={() => { setGood(false); setOpen(true); }}>👎 Generic / off-brand</button>
       </div>
     );
   }
@@ -126,7 +126,7 @@ function Thumbs({ lastQuestion, lastAnswer }: { lastQuestion: string; lastAnswer
       });
       setOpen(false);
       setWhy('');
-    } catch (e) {
+    } catch {
       alert('Could not send feedback. Try again.');
     } finally {
       setSending(false);
@@ -134,17 +134,17 @@ function Thumbs({ lastQuestion, lastAnswer }: { lastQuestion: string; lastAnswer
   };
 
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+    <div className="row" style={{ marginTop: 0 }}>
       <input
         placeholder="Why?"
         value={why}
         onChange={(e) => setWhy(e.target.value)}
-        style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1px solid #d1d5db' }}
+        className="textarea"
+        style={{ flex: 1 }}
       />
-      <button onClick={send} disabled={sending} style={{ padding: '8px 12px', borderRadius: 10 }}>
+      <button className="btn" onClick={send} disabled={sending}>
         {sending ? 'Sending…' : 'Send'}
       </button>
     </div>
   );
 }
-
