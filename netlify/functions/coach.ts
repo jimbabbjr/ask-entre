@@ -60,14 +60,32 @@ export const handler: Handler = async (event) => {
     const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
     const res = await client.chat.completions.create({
-      model,
-      temperature: 0.4,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        // pass full chat history so the model can see prior clarifier(s)
-        ...messages
-      ]
-    });
+  model,
+  temperature: 0.3,
+  messages: [
+    { role: 'system', content: SYSTEM_PROMPT },
+
+    // EXAMPLE 1 — vague prompt => one clarifier, then stop
+    { role: 'user', content: 'Employee is being difficult.' },
+    { role: 'assistant', content: 'Which behavior is causing issues (be specific), and what expectation have you already set?' },
+
+    // EXAMPLE 2 — proper 3-part answer
+    { role: 'user', content: 'My weekly leadership meeting keeps running long and lacks focus. What should I do?' },
+    { role: 'assistant', content:
+`1) Direct answer — Reset the meeting with a tight agenda, clear roles, and hard time boxes. Start with wins, review top metrics, unblock decisions, assign owners, end with action items.
+
+2) Why it matters — Leaders create alignment and accountability. A focused cadence keeps people pulling the same direction and protects the team’s time.
+
+3) How to apply —
+- Publish a one-page agenda today: wins (3m), scorecard (5m), top 3 issues/decisions (20m), action items review (5m).
+- Assign roles: facilitator, scribe, and timekeeper. Start on time; end on time.
+- Track 5–7 metrics only; cut anything that doesn’t drive decisions.
+- Close with owners + due dates for every action item.` },
+
+    // Now include the real conversation
+    ...messages
+  ],
+});
 
     const answer = res.choices?.[0]?.message?.content?.trim() || 'Sorry, no answer generated.';
     return {
