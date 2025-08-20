@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
   "dev": "netlify dev",
-  "build": "npm --prefix client run build",
+  "build": "npm --prefix client ci && npm --prefix client run build",
   "test": "echo \"no tests\""
 },
   "keywords": [],
