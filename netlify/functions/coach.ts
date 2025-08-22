@@ -54,7 +54,7 @@ CHECK BEFORE SENDING
 type Msg = { role: 'user' | 'assistant'; content: string };
 
 /** Second-pass reviewer to tighten the draft to EL voice & anchors (no code rules per topic). */
-async function brandReview({
+/** async function brandReview({
   client,
   model,
   question,
@@ -94,7 +94,7 @@ Rules:
   });
 
   return res.choices?.[0]?.message?.content?.trim() || draft;
-}
+} **/
 
 export const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod !== 'POST') {
@@ -153,8 +153,8 @@ export const handler: Handler = async (event: HandlerEvent) => {
     // Observability: question text
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
 
-    // If it's a real answer (not just a clarifier), run brand review
-    const hasFormat =
+     // If it's a real answer (not just a clarifier), run brand review
+    /** const hasFormat =
       /1\)\s*Direct answer/i.test(answer) &&
       /2\)\s*Why it matters/i.test(answer) &&
       /3\)\s*How to apply/i.test(answer);
@@ -175,7 +175,7 @@ export const handler: Handler = async (event: HandlerEvent) => {
         answer = reviewed;
       }
     }
-
+**/
     // Log a compact Q/A line
     try {
       console.log(
