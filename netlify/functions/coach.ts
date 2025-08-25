@@ -78,10 +78,11 @@ Enforce MICRO-TURN and PLAIN TEXT.
 
 Rules:
 - PLAIN TEXT ONLY. No markdown, bullets, numbering, headings, or formatting characters (* # - _ ' []).
-- Max 5 short lines (~18 words each). End with exactly one question prefixed "Q:".
-- Pick ONE mode (Decision, Diagnostic, Strategy, Plan, Messaging, Brainstorm). If info is missing, choose Diagnostic.
+- Keep it short by default: max 5 lines (~18 words each). Allow up to 12 lines only if the user requested [detail:high].
+- Ask at most ONE high-leverage question only if material facts are missing; if you ask a question, make it the last line, prefix with "Question:", and STOP.
+- Pick ONE mode (Decision, Diagnostic, Strategy, Plan, Messaging, Brainstorm). Prefer Diagnostic only when facts are missing.
 - Anchor to the user's nouns/numbers; be decisive; cut filler; tie to levers (cash, control, capacity, quality, time).
-- Do not invent new EL tools or claims. If not taught, say so and proceed from principles.
+- Don’t invent EL tools or claims. If something isn’t taught directly, say so and proceed from principles.
 `
       },
       {
@@ -92,6 +93,27 @@ Rules:
   });
 
   return res.choices?.[0]?.message?.content?.trim() || draft;
+}
+
+function enforceMicroTurn(answer: string, lastUserMsg: string): string {
+  // Strip list bullets at line start (markdown-looking)
+  answer = answer.replace(/^\s*[-*#]\s?/gm, '');
+  // Strip simple formatting markers
+  answer = answer.replace(/[*`_]/g, '');
+
+  const wantsHighDetail = /\[detail\s*:\s*high\]/i.test(lastUserMsg || '');
+  const maxLines = wantsHighDetail ? 12 : 5;
+
+  let lines = answer.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // If a Q: appears anywhere, keep up to and including the first Q: line, then stop.
+  const qIdx = lines.findIndex(l => /^Q:\s?/i.test(l));
+  if (qIdx >= 0) lines = lines.slice(0, qIdx + 1);
+
+  // Enforce line budget
+  if (lines.length > maxLines) lines = lines.slice(0, maxLines);
+
+  return lines.join('\n');
 }
 
 export const handler: Handler = async (event: HandlerEvent) => {
@@ -128,14 +150,22 @@ export const handler: Handler = async (event: HandlerEvent) => {
         { role: 'assistant', content: 'Which behavior is causing issues (be specific), and what expectation have you already set?' },
 
         { role: 'user', content: 'My weekly leadership meeting keeps running long and lacks focus. What should I do?' },
-        {
-          role: 'assistant',
-          content: `Reset the meeting with a tight agenda, clear roles, hard time boxes.
+        // Meeting example — Diagnostic (with Q last)
+{ role: 'assistant', content:
+  `Reset the meeting with a tight agenda, clear roles, hard time boxes.
 Protect time: wins (3m), scorecard (5m), top 3 issues (20m), actions (5m).
-Assign facilitator, scribe, timekeeper; start and end on time; cap metrics to 5–7.
-If it runs long, cut topics or raise prices on time (hard stop).
+Assign facilitator, scribe, timekeeper; start/end on time; cap metrics to 5–7.
+If it still runs long, cut topics or park items with owners/dates.
 Q: What are your top 3 issues and who will facilitate?`
-        },
+},
+
+// Optional: Decision example — no question
+ { role: 'assistant', content:
+   `Keep the crew and raise price 5–8% to cut backlog.
+ Protect quality: assign a working lead and weekly scorecard.
+ Keep ≥6 months OPEX liquid before adding headcount.
+ If close rate stays >55% after price change, add one crew next quarter.`
+ },
 
         // Real conversation history (lets the model see if it already asked a clarifier)
         ...messages
@@ -158,11 +188,18 @@ if (wantsHighDetail) {
   isMicroTurn = L.length <= 12 && !/[#*_`\-]/.test(answer) && /(?:^|\n)Q:\s?.+/.test(answer);
 }
 
-const reviewed = await brandReview({ client, model, question: lastUserMsg, draft: answer });
+// Run brand review and enforce micro-turn (no markdown, optional Q-last)
+const reviewed = await brandReview({
+  client,
+  model,
+  question: lastUserMsg,
+  draft: answer,
+});
 if (reviewed && reviewed.trim()) {
-  answer = reviewed;
+  answer = enforceMicroTurn(reviewed, lastUserMsg);
+} else {
+  answer = enforceMicroTurn(answer, lastUserMsg);
 }
-
 
     // Log a compact Q/A line
     try {
