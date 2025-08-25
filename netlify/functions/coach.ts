@@ -54,7 +54,7 @@ CHECK BEFORE SENDING
 type Msg = { role: 'user' | 'assistant'; content: string };
 
 /** Second-pass reviewer to tighten the draft to EL voice & anchors (no code rules per topic). */
-/** async function brandReview({
+async function brandReview({
   client,
   model,
   question,
@@ -73,17 +73,15 @@ type Msg = { role: 'user' | 'assistant'; content: string };
         role: 'system',
         content: `
 You are the Brand Reviewer for EntreLeadership answers.
-Tighten the DRAFT so it clearly reflects EntreLeadership practices and voice—ONLY where relevant to the QUESTION.
-Keep the 3-part format exactly:
-1) Direct answer —
-2) Why it matters —
-3) How to apply —
+Tighten the DRAFT so it reflects EntreLeadership voice and principles—ONLY where relevant to the QUESTION.
+Enforce MICRO-TURN and PLAIN TEXT.
+
 Rules:
-- ≤300 words, plainspoken, decisive. No hedging.
-- Do not ask clarifying questions here.
-- Only add references that fit the question: Weekly Reports (updates/accountability), Desired Future & defining objectives (alignment/resistance), named core values + brief comms plan (policy/exception), action items, leadership meeting cadence.
-- Do NOT invent new product names or frameworks.
-- Prefer concrete, practical language over abstractions.
+- PLAIN TEXT ONLY. No markdown, bullets, numbering, headings, or formatting characters (* # - _ ' []).
+- Max 5 short lines (~18 words each). End with exactly one question prefixed "Q:".
+- Pick ONE mode (Decision, Diagnostic, Strategy, Plan, Messaging, Brainstorm). If info is missing, choose Diagnostic.
+- Anchor to the user's nouns/numbers; be decisive; cut filler; tie to levers (cash, control, capacity, quality, time).
+- Do not invent new EL tools or claims. If not taught, say so and proceed from principles.
 `
       },
       {
@@ -94,7 +92,7 @@ Rules:
   });
 
   return res.choices?.[0]?.message?.content?.trim() || draft;
-} **/
+}
 
 export const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod !== 'POST') {
@@ -132,15 +130,11 @@ export const handler: Handler = async (event: HandlerEvent) => {
         { role: 'user', content: 'My weekly leadership meeting keeps running long and lacks focus. What should I do?' },
         {
           role: 'assistant',
-          content: `1) Direct answer — Reset the meeting with a tight agenda, clear roles, and hard time boxes. Start with wins, review top metrics, unblock decisions, assign owners, end with action items.
-
-2) Why it matters — Leaders create alignment and accountability. A focused cadence keeps people pulling the same direction and protects the team’s time.
-
-3) How to apply —
-- Publish a one-page agenda today: wins (3m), scorecard (5m), top 3 issues/decisions (20m), action items review (5m).
-- Assign roles: facilitator, scribe, and timekeeper. Start on time; end on time.
-- Track 5–7 metrics only; cut anything that doesn’t drive decisions.
-- Close with owners + due dates for every action item.`
+          content: `Reset the meeting with a tight agenda, clear roles, hard time boxes.
+Protect time: wins (3m), scorecard (5m), top 3 issues (20m), actions (5m).
+Assign facilitator, scribe, timekeeper; start and end on time; cap metrics to 5–7.
+If it runs long, cut topics or raise prices on time (hard stop).
+Q: What are your top 3 issues and who will facilitate?`
         },
 
         // Real conversation history (lets the model see if it already asked a clarifier)
@@ -153,29 +147,23 @@ export const handler: Handler = async (event: HandlerEvent) => {
     // Observability: question text
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
 
-     // If it's a real answer (not just a clarifier), run brand review
-    /** const hasFormat =
-      /1\)\s*Direct answer/i.test(answer) &&
-      /2\)\s*Why it matters/i.test(answer) &&
-      /3\)\s*How to apply/i.test(answer);
+    // Always run brand review; enforce micro-turn plain text
+const lines = answer.split('\n').filter(l => l.trim());
+let isMicroTurn = lines.length <= 5 && !/[#*_`\-]/.test(answer) && /(?:^|\n)Q:\s?.+/.test(answer);
 
-    if (hasFormat) {
-      const reviewed = await brandReview({
-        client,
-        model,
-        question: lastUserMsg,
-        draft: answer,
-      });
+// Optional: allow longer replies when explicitly requested
+const wantsHighDetail = /\[detail\s*:\s*high\]/i.test(lastUserMsg || '');
+if (wantsHighDetail) {
+  const L = answer.split('\n').filter(l => l.trim());
+  isMicroTurn = L.length <= 12 && !/[#*_`\-]/.test(answer) && /(?:^|\n)Q:\s?.+/.test(answer);
+}
 
-      if (
-        /1\)\s*Direct answer/i.test(reviewed) &&
-        /2\)\s*Why it matters/i.test(reviewed) &&
-        /3\)\s*How to apply/i.test(reviewed)
-      ) {
-        answer = reviewed;
-      }
-    }
-**/
+const reviewed = await brandReview({ client, model, question: lastUserMsg, draft: answer });
+if (reviewed && reviewed.trim()) {
+  answer = reviewed;
+}
+
+
     // Log a compact Q/A line
     try {
       console.log(
