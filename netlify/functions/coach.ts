@@ -152,20 +152,20 @@ export const handler: Handler = async (event: HandlerEvent) => {
 
         { role: 'user', content: 'My weekly leadership meeting keeps running long and lacks focus. What should I do?' },
         // Meeting example — Diagnostic (with Q last)
-{ role: 'assistant', content:
-  `Reset the meeting with a tight agenda, clear roles, hard time boxes.
-Protect time: wins (3m), scorecard (5m), top 3 issues (20m), actions (5m).
-Assign facilitator, scribe, timekeeper; start/end on time; cap metrics to 5–7.
-If it still runs long, cut topics or park items with owners/dates.
-Q: What are your top 3 issues and who will facilitate?`
+        { role: 'assistant', content:
+          `Reset the meeting with a tight agenda, clear roles, hard time boxes.
+           Protect time: wins (3m), scorecard (5m), top 3 issues (20m), actions (5m).
+           Assign facilitator, scribe, timekeeper; start/end on time; cap metrics to 5–7.
+           If it still runs long, cut topics or park items with owners/dates.
+           Question: What are your top 3 issues and who will facilitate?`
 },
 
 // Optional: Decision example — no question
- { role: 'assistant', content:
-   `Keep the crew and raise price 5–8% to cut backlog.
- Protect quality: assign a working lead and weekly scorecard.
- Keep ≥6 months OPEX liquid before adding headcount.
- If close rate stays >55% after price change, add one crew next quarter.`
+        { role: 'assistant', content:
+           `Keep the crew and raise price 5–8% to cut backlog.
+            Protect quality: assign a working lead and weekly scorecard.
+            Keep ≥6 months OPEX liquid before adding headcount.
+            If close rate stays >55% after price change, add one crew next quarter.`
  },
 
         // Real conversation history (lets the model see if it already asked a clarifier)
