@@ -103,7 +103,7 @@ function enforceMicroTurn(answer: string, lastUserMsg: string): string {
   const wantsHighDetail = /\[detail\s*:\s*high\]/i.test(lastUserMsg || '');
   const maxLines = wantsHighDetail ? 12 : 5;
 
-  let lines = answer.split('\n').map(l => l.trim()).filter(Boolean);
+  let lines = answer.split('\n').map((l: string) => l.trim()).filter(Boolean);
 
   // If a Q: appears anywhere, keep up to and including the first Q: line, then stop.
   const qIdx = lines.findIndex(l => /^Q:\s?/i.test(l));
@@ -136,12 +136,11 @@ export const handler: Handler = async (event: HandlerEvent) => {
       return { statusCode: 400, body: 'Provide {messages: [{role, content}...]} or {question: string}' };
     }
 
-    const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    const model = process.env.OPENAI_MODEL || 'gpt-4.1';
 
-    const res = await client.chat.completions.create({
+    const res = await client.responses.create({
       model,
-      temperature: 0.3,
-      messages: [
+      input: [
         { role: 'system', content: SYSTEM_PROMPT },
 
         // Few-shot examples to lock behavior/voice
@@ -168,22 +167,27 @@ export const handler: Handler = async (event: HandlerEvent) => {
 
         // Real conversation history (lets the model see if it already asked a clarifier)
         ...messages
-      ]
+      ],
+      temperature: 0.3
     });
 
-    let answer = res.choices?.[0]?.message?.content?.trim() || 'Sorry, no answer generated.';
+    const firstOutput = res.output[0];
+    const firstText = (firstOutput.type === "message" && firstOutput.content[0].type === "output_text")
+      ? firstOutput.content[0].text
+      : "";
+    let answer = firstText.trim() || "Sorry, no answer generated.";
 
     // Observability: question text
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
 
     // Always run brand review; enforce micro-turn plain text
-const lines = answer.split('\n').filter(l => l.trim());
+const lines = answer.split('\n').filter((l: string) => l.trim());
 let isMicroTurn = lines.length <= 5 && !/[#*_`\-]/.test(answer) && /(?:^|\n)Q:\s?.+/.test(answer);
 
 // Optional: allow longer replies when explicitly requested
 const wantsHighDetail = /\[detail\s*:\s*high\]/i.test(lastUserMsg || '');
 if (wantsHighDetail) {
-  const L = answer.split('\n').filter(l => l.trim());
+  const L = answer.split('\n').filter((l: string) => l.trim());
   isMicroTurn = L.length <= 12 && !/[#*_`\-]/.test(answer) && /(?:^|\n)Q:\s?.+/.test(answer);
 }
 /** 
