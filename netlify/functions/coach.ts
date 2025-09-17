@@ -259,7 +259,7 @@ export const handler: Handler = async (event: HandlerEvent) => {
     return {
       statusCode: 200,
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, id: (resp as any)?.id || null })
+      body: JSON.stringify({ text, id: (resp as any)?.id || null, answer: text })
     };
   } catch (err) {
     console.error(err);
