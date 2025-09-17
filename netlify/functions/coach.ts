@@ -114,93 +114,63 @@ FINAL CHECK
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
-/** Second-pass reviewer to tighten the draft to EL voice & anchors (no code rules per topic). 
-async function brandReview({
-  client,
-  model,
-  question,
-  draft,
-}: {
-  client: OpenAI;
-  model: string;
-  question: string;
-  draft: string;
-}) {
-  const res = await client.chat.completions.create({
-    model,
-    temperature: 0.2,
-    messages: [
-      {
-        role: 'system',
-        content: `
-You are the Brand Reviewer for EntreLeadership answers.
-Tighten the DRAFT so it reflects EntreLeadership voice and principles—ONLY where relevant to the QUESTION.
-Enforce MICRO-TURN and PLAIN TEXT.
-
-Rules:
-- PLAIN TEXT ONLY. No markdown, bullets, numbering, headings, or formatting characters (* # - _ ' []).
-- Keep it short by default: max 5 lines (~18 words each). Allow up to 12 lines only if the user requested [detail:high].
-- Ask at most ONE high-leverage question only if material facts are missing; if you ask a question, make it the last line, prefix with "Question:", and STOP.
-- Pick ONE mode (Decision, Diagnostic, Strategy, Plan, Messaging, Brainstorm). Prefer Diagnostic only when facts are missing.
-- Anchor to the user's nouns/numbers; be decisive; cut filler; tie to levers (cash, control, capacity, quality, time).
-- Don’t invent EL tools or claims. If something isn’t taught directly, say so and proceed from principles.
-`
-      },
-      {
-        role: 'user',
-        content: `QUESTION:\n${question}\n\nDRAFT (keep substance; align to brand if relevant):\n${draft}`
-      }
-    ],
-  });
-
-  return res.choices?.[0]?.message?.content?.trim() || draft;
-}*/
-
-function enforceMicroTurn(answer: string, lastUserMsg: string): string {
-  // Strip list bullets at line start (markdown-looking)
-  answer = answer.replace(/^\s*[-*#]\s?/gm, '');
-  // Strip simple formatting markers
-  answer = answer.replace(/[*`_]/g, '');
-
-  const wantsHighDetail = /\[detail\s*:\s*high\]/i.test(lastUserMsg || '');
-  const maxLines = wantsHighDetail ? 12 : 5;
-
-  let lines = answer.split('\n').map((l: string) => l.trim()).filter(Boolean);
-
-  // If a Q: appears anywhere, keep up to and including the first Q: line, then stop.
-  const qIdx = lines.findIndex(l => /^Q:\s?/i.test(l));
-  if (qIdx >= 0) lines = lines.slice(0, qIdx + 1);
-
-  // Enforce line budget
-  if (lines.length > maxLines) lines = lines.slice(0, maxLines);
-
-  return lines.join('\n');
-}
-
 export const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Use POST' };
   }
 
   try {
-    const body = JSON.parse(event.body || '{}') as { messages?: Msg[]; question?: string };
+    const body = JSON.parse(event.body || '{}') as { input?: any; messages?: Msg[]; question?: string };
 
-    // Accept either full chat history or a single question for back-compat
-    let messages: Msg[] = Array.isArray(body.messages)
-      ? body.messages.filter((m) => m && typeof m.content === 'string')
-      : [];
+    const LOG_VERBOSE = process.env.LOG_VERBOSE !== 'false'; // default true
+    const PII_REDACT = process.env.PII_REDACT === 'true';    // default false (no redaction)
+    const ENV_NAME = process.env.NODE_ENV || 'unknown';
 
-    if (!messages.length && typeof body.question === 'string' && body.question.trim()) {
-      messages = [{ role: 'user', content: body.question.trim() }];
+    if (Array.isArray(body.input) && (Array.isArray(body.messages) || typeof body.question === 'string')) {
+      return { statusCode: 400, body: 'Provide either input OR messages/question, not both.' };
     }
 
-    if (!messages.length) {
-      return { statusCode: 400, body: 'Provide {messages: [{role, content}...]} or {question: string}' };
+    let inputMode: 'passthrough' | 'messages' | 'question' = 'question';
+    let lastUserMsg = '';
+    let messageCount = 0;
+
+    let input: any[] = [];
+
+    if (Array.isArray(body.input)) {
+      input = body.input;
+      inputMode = 'passthrough';
+      messageCount = input.length;
+      // attempt to capture last user preview if present
+      const rev = [...input].reverse();
+      for (const it of rev) {
+        if (it?.role === 'user' && typeof it.content === 'string') { lastUserMsg = it.content; break; }
+      }
+    } else {
+      if (Array.isArray(body.messages)) {
+        for (const m of body.messages) {
+          if (m && typeof m.content === 'string') {
+            input.push(m);
+            messageCount++;
+            if (m.role === 'user') lastUserMsg = m.content || lastUserMsg;
+          }
+        }
+        inputMode = 'messages';
+      } else if (typeof body.question === 'string' && body.question.trim()) {
+        input.push({ role: 'user', content: body.question.trim() });
+        inputMode = 'question';
+        lastUserMsg = body.question.trim();
+        messageCount = 1;
+      }
+    }
+
+    if (!input.length) {
+      return { statusCode: 400, body: 'Provide {input: [...]} or {messages: [{role, content}...]} or {question: string}' };
     }
 
     const model = process.env.OPENAI_MODEL || 'gpt-4.1';
+    const temperature = 0.3;
 
-    const res = await client.responses.create({
+    const resp = await client.responses.create({
       model,
       input: [
         { role: 'system', content: SYSTEM_PROMPT },
@@ -210,99 +180,86 @@ export const handler: Handler = async (event: HandlerEvent) => {
         { role: 'assistant', content: 'Which behavior is causing issues (be specific), and what expectation have you already set?' },
 
         { role: 'user', content: 'My weekly leadership meeting keeps running long and lacks focus. What should I do?' },
-        // Meeting example — Diagnostic (with Q last)
         { role: 'assistant', content:
           `Reset the meeting with a tight agenda, clear roles, hard time boxes.
            Protect time: wins (3m), scorecard (5m), top 3 issues (20m), actions (5m).
            Assign facilitator, scribe, timekeeper; start/end on time; cap metrics to 5–7.
            If it still runs long, cut topics or park items with owners/dates.
            Question: What are your top 3 issues and who will facilitate?`
-},
+        },
 
-// Optional: Decision example — no question
         { role: 'assistant', content:
            `Keep the crew and raise price 5–8% to cut backlog.
             Protect quality: assign a working lead and weekly scorecard.
             Keep ≥6 months OPEX liquid before adding headcount.
             If close rate stays >55% after price change, add one crew next quarter.`
- },
+        },
 
-        // Real conversation history (lets the model see if it already asked a clarifier)
-        ...messages
+        ...input
       ],
-      temperature: 0.3
+      temperature
     });
 
-    const firstOutput = res.output[0];
-    const firstText = (firstOutput.type === "message" && firstOutput.content[0].type === "output_text")
-      ? firstOutput.content[0].text
-      : "";
-    let answer = firstText.trim() || "Sorry, no answer generated.";
+    let text = '';
+    const out = (resp as any)?.output || [];
+    for (const item of out) {
+      if (item?.type === 'message' && Array.isArray(item.content)) {
+        for (const c of item.content) {
+          if ((c?.type === 'output_text' || c?.type === 'text') && typeof c.text === 'string') {
+            text += (text ? '\n' : '') + c.text;
+          }
+        }
+      }
+    }
+    if (!text) text = (resp as any)?.output_text || '';
 
-    // Observability: question text
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
+    const usage = (resp as any)?.usage || null;
 
-    // Always run brand review; enforce micro-turn plain text
-const lines = answer.split('\n').filter((l: string) => l.trim());
-let isMicroTurn = lines.length <= 5 && !/[#*_`\-]/.test(answer) && /(?:^|\n)Q:\s?.+/.test(answer);
-
-// Optional: allow longer replies when explicitly requested
-const wantsHighDetail = /\[detail\s*:\s*high\]/i.test(lastUserMsg || '');
-if (wantsHighDetail) {
-  const L = answer.split('\n').filter((l: string) => l.trim());
-  isMicroTurn = L.length <= 12 && !/[#*_`\-]/.test(answer) && /(?:^|\n)Q:\s?.+/.test(answer);
-}
-/** 
-// Run brand review and enforce micro-turn (no markdown, optional Q-last)
-const reviewed = await brandReview({
-  client,
-  model,
-  question: lastUserMsg,
-  draft: answer,
-});
-if (reviewed && reviewed.trim()) {
-  answer = enforceMicroTurn(reviewed, lastUserMsg);
-} else {
-  answer = enforceMicroTurn(answer, lastUserMsg);
-}*/
-
-    // Log a compact Q/A line
-    try {
-      console.log(
-        'COACH_QA',
-        JSON.stringify({
-          ts: new Date().toISOString(),
-          q: lastUserMsg.slice(0, 500),
-          answer: answer.slice(0, 1200),
-          usage: (res as any).usage || null,
-          ua: event.headers?.['user-agent'] || ''
-        })
-      );
-    } catch {}
-
-    // Persist to Netlify Blobs for >24h retention
     try {
       connectLambda(event as any);
-      const store = getStore('logs');
+      const store = getStore('coach-logs');
       const ts = new Date().toISOString();
-      await store.setJSON(
-        `qa/${ts.slice(0, 10)}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`,
-        {
-          ts,
-          q: lastUserMsg.slice(0, 500),
-          answer: answer.slice(0, 2000),
-          ua: event.headers?.['user-agent'] || ''
-        }
-      );
+      const key = `qa/${ENV_NAME}/${ts.slice(0,10)}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.json`;
+
+      const maybeRedact = (s: string) => {
+        if (!PII_REDACT || !s) return s;
+        return s
+          .replace(/\b\d{3}[- ]?\d{2}[- ]?\d{4}\b/g, '[REDACTED-SSN]')
+          .replace(/\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[REDACTED-PHONE]')
+          .replace(/\b(?:\d[ -]*?){13,19}\b/g, '[REDACTED-CC]');
+      };
+
+      const baseRecord: any = {
+        ts,
+        id: (resp as any)?.id || null,
+        model,
+        temperature,
+        inputMode,
+        messageCount,
+        lastUserPreview: (lastUserMsg || '').slice(0, 500),
+        textLength: text?.length || 0,
+        ua: event.headers?.['user-agent'] || '',
+        usage
+      };
+
+      if (LOG_VERBOSE) {
+        baseRecord.input = input; // full normalized input array
+        baseRecord.text = text;   // full assistant text
+      }
+
+      const record = PII_REDACT
+        ? JSON.parse(maybeRedact(JSON.stringify(baseRecord)))
+        : baseRecord;
+
+      await store.setJSON(key, record);
     } catch (e) {
-      // non-fatal
-      console.error('BLOBS_QA_ERROR', e);
+      console.error('BLOBS_LOG_ERROR', e);
     }
 
     return {
       statusCode: 200,
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answer })
+      body: JSON.stringify({ text, id: (resp as any)?.id || null })
     };
   } catch (err) {
     console.error(err);
